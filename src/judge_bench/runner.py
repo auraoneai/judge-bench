@@ -13,13 +13,28 @@ from .plots import write_plot_artifacts
 from .probes import PROBES
 from .synthetic_responses import controlled_pairs
 
+PROBE_CALLS_PER_PAIR = {
+    "position_bias": 2,
+    "verbosity_bias": 1,
+    "self_preference": 1,
+    "paraphrase_stability": 5,
+    "anchoring": 2,
+    "calibration": 1,
+}
+
+
 def backend_for(name: str, model: str):
     mod = importlib.import_module(f"judge_bench.backends.{name}")
     return mod.BackendClient(model)
 
+
+def estimate_calls(probes: list[str], pairs: int) -> int:
+    return sum(PROBE_CALLS_PER_PAIR.get(probe, 2) for probe in probes) * pairs
+
+
 def estimate_cost(backend_name: str, probes: list[str], pairs: int, model: str | None = None) -> float:
     backend = backend_for(backend_name, model or backend_name)
-    return backend.cost_per_call * len(probes) * pairs * 2
+    return backend.cost_per_call * estimate_calls(probes, pairs)
 
 
 def cache_key(backend, prompt, a, b):
@@ -94,6 +109,7 @@ def main(argv=None):
     probes = PROBES if args.probes == "all" else args.probes.split(",")
     if args.pairs <= 0:
         parser.error("--pairs must be a positive integer")
+    expected_calls = estimate_calls(probes, args.pairs)
     cost = estimate_cost(args.backend, probes, args.pairs, args.model)
     if args.dry_run:
         print(
@@ -103,7 +119,7 @@ def main(argv=None):
                     "model": args.model,
                     "probes": probes,
                     "response_pairs": args.pairs,
-                    "expected_calls": len(probes) * args.pairs * 2,
+                    "expected_calls": expected_calls,
                     "expected_cost_usd": round(cost, 2),
                     "cache_dir": args.cache_dir,
                     "requires_confirm_cost": cost > 0,

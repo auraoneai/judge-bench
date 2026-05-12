@@ -6,9 +6,13 @@ import judge_bench.backends.local as local_backend
 import judge_bench.backends.openai as openai_backend
 from judge_bench.plots import reliability_diagram_points, write_plot_artifacts
 from judge_bench.backends.base import JudgeOutput
-from judge_bench.runner import CachedBackend, cache_key, estimate_cost, main, run_suite
+from judge_bench.runner import CachedBackend, cache_key, estimate_calls, estimate_cost, main, run_suite
 
 def test_dry_cost(): assert estimate_cost("local", ["position_bias"], 10) == 0
+
+def test_cost_estimate_uses_probe_call_counts():
+    assert estimate_calls(["position_bias", "verbosity_bias", "paraphrase_stability"], 10) == 80
+    assert estimate_cost("openai", ["paraphrase_stability"], 2, "gpt-4o") == 0.1
 
 def test_dry_run_reports_cost_without_api_spend(capsys):
     assert main(["run", "--backend", "openai", "--model", "gpt-4o", "--probes", "position_bias", "--dry-run"]) == 0
