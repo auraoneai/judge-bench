@@ -1,5 +1,8 @@
+import judge_bench.backends.anthropic as anthropic_backend
+import judge_bench.backends.google as google_backend
+import judge_bench.backends.openai as openai_backend
 from judge_bench.backends.base import JudgeOutput
-from judge_bench.runner import CachedBackend, run_suite, estimate_cost
+from judge_bench.runner import CachedBackend, estimate_cost, run_suite
 
 def test_dry_cost(): assert estimate_cost("local", ["position_bias"], 10) == 0
 
@@ -21,3 +24,37 @@ def test_cache_prevents_duplicate_backend_calls(tmp_path):
     assert backend.score("p", "a", "b") == backend.score("p", "a", "b")
     assert raw.calls == 1
     assert backend.hits == 1 and backend.misses == 1
+
+def test_openai_backend_parses_structured_response(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        openai_backend,
+        "post_json",
+        lambda *args, **kwargs: {"output_text": '{"preference":"A","score_a":0.9,"score_b":0.2,"rationale":"clearer"}'},
+    )
+    output = openai_backend.BackendClient("gpt-4o").score("prompt", "good", "bad")
+    assert output == JudgeOutput("A", 0.9, 0.2, "clearer", "openai")
+
+def test_anthropic_backend_parses_message_response(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(
+        anthropic_backend,
+        "post_json",
+        lambda *args, **kwargs: {
+            "content": [{"type": "text", "text": '{"preference":"B","score_a":0.1,"score_b":0.8,"rationale":"more complete"}'}]
+        },
+    )
+    output = anthropic_backend.BackendClient("claude-sonnet-4-20250514").score("prompt", "bad", "good")
+    assert output == JudgeOutput("B", 0.1, 0.8, "more complete", "anthropic")
+
+def test_google_backend_parses_generate_content_response(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(
+        google_backend,
+        "post_json",
+        lambda *args, **kwargs: {
+            "candidates": [{"content": {"parts": [{"text": '{"preference":"tie","score_a":0.5,"score_b":0.5,"rationale":"equivalent"}'}]}}]
+        },
+    )
+    output = google_backend.BackendClient("gemini-2.5-flash").score("prompt", "same", "same")
+    assert output == JudgeOutput("tie", 0.5, 0.5, "equivalent", "google")
