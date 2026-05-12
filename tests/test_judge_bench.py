@@ -1,5 +1,6 @@
 import judge_bench.backends.anthropic as anthropic_backend
 import judge_bench.backends.google as google_backend
+import judge_bench.backends.local as local_backend
 import judge_bench.backends.openai as openai_backend
 from judge_bench.backends.base import JudgeOutput
 from judge_bench.runner import CachedBackend, estimate_cost, run_suite
@@ -58,3 +59,51 @@ def test_google_backend_parses_generate_content_response(monkeypatch):
     )
     output = google_backend.BackendClient("gemini-2.5-flash").score("prompt", "same", "same")
     assert output == JudgeOutput("tie", 0.5, 0.5, "equivalent", "google")
+
+def test_local_ollama_backend_posts_generate_payload(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        local_backend,
+        "post_json",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or {"response": '{"preference":"A","score_a":0.7,"score_b":0.3,"rationale":"better"}'},
+    )
+    output = local_backend.BackendClient("ollama:llama3.1", endpoint="http://ollama.test").score("p", "a", "b")
+    args, kwargs = calls[0]
+    assert args[0] == "http://ollama.test/api/generate"
+    assert args[2]["model"] == "llama3.1"
+    assert args[2]["format"] == "json"
+    assert kwargs["timeout"] == 60.0
+    assert output == JudgeOutput("A", 0.7, 0.3, "better", "local:ollama")
+
+def test_local_vllm_backend_posts_openai_compatible_payload(monkeypatch):
+    calls = []
+    monkeypatch.setenv("JUDGE_BENCH_LOCAL_API_KEY", "local-token")
+    monkeypatch.setattr(
+        local_backend,
+        "post_json",
+        lambda *args, **kwargs: calls.append((args, kwargs))
+        or {
+            "choices": [
+                {"message": {"content": '{"preference":"B","score_a":0.2,"score_b":0.9,"rationale":"stronger"}'}}
+            ]
+        },
+    )
+    output = local_backend.BackendClient("vllm:meta-llama/Llama-3.1-8B-Instruct", endpoint="http://vllm.test/v1").score(
+        "p", "a", "b"
+    )
+    args, _kwargs = calls[0]
+    assert args[0] == "http://vllm.test/v1/chat/completions"
+    assert args[1] == {"Authorization": "Bearer local-token"}
+    assert args[2]["response_format"] == {"type": "json_object"}
+    assert output == JudgeOutput("B", 0.2, 0.9, "stronger", "local:vllm")
+
+def test_local_hf_backend_parses_tgi_response(monkeypatch):
+    monkeypatch.setenv("JUDGE_BENCH_LOCAL_URL", "http://tgi.test")
+    monkeypatch.setattr(
+        local_backend,
+        "post_json",
+        lambda *args, **kwargs: [{"generated_text": '{"preference":"tie","score_a":0.5,"score_b":0.5,"rationale":"same"}'}],
+    )
+    output = local_backend.BackendClient("hf:mistral").score("p", "a", "b")
+    assert output == JudgeOutput("tie", 0.5, 0.5, "same", "local:hf")
