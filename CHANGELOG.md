@@ -4,6 +4,7 @@
 
 - Prepare hardened source-side release after CI, validation, documentation, and packaging fixes.
 - Add real local backend paths for Ollama, vLLM/OpenAI-compatible servers, and Hugging Face text generation while retaining a deterministic offline heuristic for smoke tests.
+- Split the six probe modules into distinct synthetic diagnostics and emit JSON/SVG/optional matplotlib plot artifacts from the runner.
 
 ## 0.1.0
 

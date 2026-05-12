@@ -2,6 +2,7 @@ import judge_bench.backends.anthropic as anthropic_backend
 import judge_bench.backends.google as google_backend
 import judge_bench.backends.local as local_backend
 import judge_bench.backends.openai as openai_backend
+from judge_bench.plots import reliability_diagram_points, write_plot_artifacts
 from judge_bench.backends.base import JudgeOutput
 from judge_bench.runner import CachedBackend, estimate_cost, run_suite
 
@@ -10,6 +11,19 @@ def test_dry_cost(): assert estimate_cost("local", ["position_bias"], 10) == 0
 def test_all_probes_mocked():
     report = run_suite("local", probes=["position_bias", "verbosity_bias", "self_preference", "paraphrase_stability", "anchoring", "calibration"], pairs=3)
     assert len(report["results"]) == 6 and report["not_a_benchmark"] is True
+    by_probe = {result["probe"]: result for result in report["results"]}
+    assert by_probe["verbosity_bias"]["verbose_preference_rate"] >= 0
+    assert by_probe["self_preference"]["own_family"] == "local"
+    assert by_probe["paraphrase_stability"]["paraphrases_per_pair"] == 5
+    assert "reliability_bins" in by_probe["calibration"]
+
+def test_plot_artifacts_written(tmp_path):
+    report = run_suite("local", probes=["position_bias", "calibration"], pairs=3, cache_dir=tmp_path / "cache")
+    artifacts = write_plot_artifacts(report, tmp_path / "report.json")
+    assert (tmp_path / "report.plots.json").exists()
+    assert (tmp_path / "report.svg").read_text(encoding="utf-8").startswith("<svg")
+    assert reliability_diagram_points(report["results"])
+    assert artifacts["json"].endswith(".plots.json")
 
 def test_cache_prevents_duplicate_backend_calls(tmp_path):
     class CountingBackend:

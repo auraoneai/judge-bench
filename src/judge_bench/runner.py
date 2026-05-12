@@ -6,6 +6,7 @@ from typing import Any
 from .backends.base import JudgeOutput
 from .synthetic_responses import controlled_pairs
 from .probes import PROBES
+from .plots import write_plot_artifacts
 
 def backend_for(name: str, model: str):
     mod = importlib.import_module(f"judge_bench.backends.{name}")
@@ -45,7 +46,7 @@ def run_suite(backend_name="local", model="local-judge", probes=None, pairs=20, 
     for probe in probes:
         mod = importlib.import_module(f"judge_bench.probes.{probe}")
         results.append(mod.run(backend, data))
-    return {"backend": backend_name, "model": model, "synthetic": True, "not_a_benchmark": True, "cache": {"hits": backend.hits, "misses": backend.misses, "dir": str(cache_dir)}, "results": results}
+    return {"backend": backend_name, "model": model, "synthetic": True, "not_a_benchmark": True, "response_pairs": len(data), "cache": {"hits": backend.hits, "misses": backend.misses, "dir": str(cache_dir)}, "results": results}
 
 def render_markdown(report):
     lines=["# Judge Bench Diagnostic Report", "", "This is not a benchmark or leaderboard. All response pairs are synthetic diagnostics.", ""]
@@ -62,5 +63,5 @@ def main(argv=None):
         print(json.dumps({"expected_cost_usd": round(cost,2), "requires_confirm_cost": True}, indent=2)); return 0
     if cost > 0 and not args.confirm_cost:
         print(json.dumps({"error": "cost confirmation required", "expected_cost_usd": round(cost,2)})); return 2
-    report=run_suite(args.backend,args.model,probes); Path(args.output).write_text(json.dumps(report, indent=2)); Path(args.output).with_suffix('.md').write_text(render_markdown(report)); print(json.dumps(report, indent=2)); return 0
+    report=run_suite(args.backend,args.model,probes); Path(args.output).write_text(json.dumps(report, indent=2)); Path(args.output).with_suffix('.md').write_text(render_markdown(report)); report["plots"] = write_plot_artifacts(report, args.output); Path(args.output).write_text(json.dumps(report, indent=2)); print(json.dumps(report, indent=2)); return 0
 if __name__ == "__main__": raise SystemExit(main())

@@ -1,12 +1,21 @@
 from __future__ import annotations
 from typing import Any
+from .common import variance
 
 def run(backend, pairs: list[dict[str, Any]], trials: int = 1) -> dict[str, Any]:
-    flips=0; total=0; first=0
+    total=0; variances=[]; preference_changes=0
+    paraphrase_suffixes = ["", " In short.", " Stated another way.", " Put simply.", " The same point applies."]
     for pair in pairs:
-        out1=backend.score(pair["prompt"], pair["response_a"], pair["response_b"])
-        out2=backend.score(pair["prompt"], pair["response_b"], pair["response_a"])
+        outputs=[backend.score(pair["prompt"], pair["response_a"] + suffix, pair["response_b"]) for suffix in paraphrase_suffixes]
         total += 1
-        if out1.preference == out2.preference: flips += 1
-        if out1.preference == "A": first += 1
-    return {"probe": __name__.split(".")[-1], "pairs": total, "flip_rate": flips / total if total else 0, "first_position_rate": first / total if total else 0, "synthetic": True}
+        variances.append(variance([out.score_a for out in outputs]))
+        if len({out.preference for out in outputs}) > 1:
+            preference_changes += 1
+    return {
+        "probe": __name__.split(".")[-1],
+        "pairs": total,
+        "flip_rate": preference_changes / total if total else 0,
+        "score_variance": sum(variances) / len(variances) if variances else 0,
+        "paraphrases_per_pair": len(paraphrase_suffixes),
+        "synthetic": True,
+    }

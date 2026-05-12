@@ -15,6 +15,7 @@ Provider backends call their public APIs directly with standard environment vari
 and `GEMINI_API_KEY` for `--backend google`. Non-dry runs require `--confirm-cost`.
 
 Repeated judge calls are cached by `(model, prompt, response_a, response_b)` under `.judge-bench-cache` so paid backends do not re-run the same synthetic diagnostic pair.
+Each run writes JSON, Markdown, and plot artifacts next to the requested output path: `<name>.md`, `<name>.plots.json`, `<name>.svg`, and `<name>.png` when `matplotlib` is installed.
 
 The local backend can run against local model servers without API spend:
 
