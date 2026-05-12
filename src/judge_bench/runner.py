@@ -1,6 +1,9 @@
 from __future__ import annotations
 import argparse, hashlib, importlib, json
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
+from .backends.base import JudgeOutput
 from .synthetic_responses import controlled_pairs
 from .probes import PROBES
 
@@ -15,14 +18,34 @@ def estimate_cost(backend_name: str, probes: list[str], pairs: int) -> float:
 def cache_key(backend, prompt, a, b):
     return hashlib.sha256(f"{backend.model}\0{prompt}\0{a}\0{b}".encode()).hexdigest()
 
+class CachedBackend:
+    def __init__(self, backend: Any, cache_dir: str | Path):
+        self.backend = backend
+        self.model = backend.model
+        self.model_family = backend.model_family
+        self.cost_per_call = backend.cost_per_call
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.hits = 0
+        self.misses = 0
+
+    def score(self, prompt: str, response_a: str, response_b: str) -> JudgeOutput:
+        path = self.cache_dir / f"{cache_key(self.backend, prompt, response_a, response_b)}.json"
+        if path.exists():
+            self.hits += 1
+            return JudgeOutput(**json.loads(path.read_text(encoding="utf-8")))
+        self.misses += 1
+        output = self.backend.score(prompt, response_a, response_b)
+        path.write_text(json.dumps(asdict(output), sort_keys=True), encoding="utf-8")
+        return output
+
 def run_suite(backend_name="local", model="local-judge", probes=None, pairs=20, cache_dir=".judge-bench-cache"):
     probes = PROBES if probes in (None, ["all"], "all") else probes
-    backend = backend_for(backend_name, model); data = controlled_pairs(pairs); results=[]
-    Path(cache_dir).mkdir(exist_ok=True)
+    backend = CachedBackend(backend_for(backend_name, model), cache_dir); data = controlled_pairs(pairs); results=[]
     for probe in probes:
         mod = importlib.import_module(f"judge_bench.probes.{probe}")
         results.append(mod.run(backend, data))
-    return {"backend": backend_name, "model": model, "synthetic": True, "not_a_benchmark": True, "results": results}
+    return {"backend": backend_name, "model": model, "synthetic": True, "not_a_benchmark": True, "cache": {"hits": backend.hits, "misses": backend.misses, "dir": str(cache_dir)}, "results": results}
 
 def render_markdown(report):
     lines=["# Judge Bench Diagnostic Report", "", "This is not a benchmark or leaderboard. All response pairs are synthetic diagnostics.", ""]
