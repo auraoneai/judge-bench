@@ -1,12 +1,43 @@
+import json
+
 import judge_bench.backends.anthropic as anthropic_backend
 import judge_bench.backends.google as google_backend
 import judge_bench.backends.local as local_backend
 import judge_bench.backends.openai as openai_backend
 from judge_bench.plots import reliability_diagram_points, write_plot_artifacts
 from judge_bench.backends.base import JudgeOutput
-from judge_bench.runner import CachedBackend, estimate_cost, run_suite
+from judge_bench.runner import CachedBackend, cache_key, estimate_cost, main, run_suite
 
 def test_dry_cost(): assert estimate_cost("local", ["position_bias"], 10) == 0
+
+def test_dry_run_reports_cost_without_api_spend(capsys):
+    assert main(["run", "--backend", "openai", "--model", "gpt-4o", "--probes", "position_bias", "--dry-run"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["backend"] == "openai"
+    assert payload["model"] == "gpt-4o"
+    assert payload["expected_calls"] == 40
+    assert payload["expected_cost_usd"] == 0.4
+    assert payload["requires_confirm_cost"] is True
+
+def test_cli_pairs_and_cache_dir_are_honored(tmp_path):
+    output = tmp_path / "report.json"
+    cache_dir = tmp_path / "cache"
+    assert main([
+        "run",
+        "--backend",
+        "local",
+        "--probes",
+        "position_bias",
+        "--pairs",
+        "2",
+        "--cache-dir",
+        str(cache_dir),
+        "--output",
+        str(output),
+    ]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["response_pairs"] == 2
+    assert report["cache"]["dir"] == str(cache_dir)
 
 def test_all_probes_mocked():
     report = run_suite("local", probes=["position_bias", "verbosity_bias", "self_preference", "paraphrase_stability", "anchoring", "calibration"], pairs=3)
@@ -39,6 +70,15 @@ def test_cache_prevents_duplicate_backend_calls(tmp_path):
     assert backend.score("p", "a", "b") == backend.score("p", "a", "b")
     assert raw.calls == 1
     assert backend.hits == 1 and backend.misses == 1
+
+def test_cache_key_includes_backend_family():
+    class Backend:
+        model = "same-model"
+
+        def __init__(self, family):
+            self.model_family = family
+
+    assert cache_key(Backend("openai"), "p", "a", "b") != cache_key(Backend("anthropic"), "p", "a", "b")
 
 def test_openai_backend_parses_structured_response(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")

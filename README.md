@@ -7,14 +7,14 @@
 ```bash
 pip install judge-bench
 judge-bench run --backend openai --model gpt-4o --probes position_bias --dry-run
-judge-bench run --backend local --probes all --output report.json
+judge-bench run --backend local --probes all --pairs 20 --cache-dir .judge-bench-cache --output report.json
 ```
 
 Provider backends call their public APIs directly with standard environment variables:
 `OPENAI_API_KEY` for `--backend openai`, `ANTHROPIC_API_KEY` for `--backend anthropic`,
 and `GEMINI_API_KEY` for `--backend google`. Non-dry runs require `--confirm-cost`.
 
-Repeated judge calls are cached by `(model, prompt, response_a, response_b)` under `.judge-bench-cache` so paid backends do not re-run the same synthetic diagnostic pair.
+Repeated judge calls are cached by `(backend family, model, prompt, response_a, response_b)` under `.judge-bench-cache` so paid backends do not re-run the same synthetic diagnostic pair. Use `--cache-dir` to isolate or share caches across runs.
 Each run writes JSON, Markdown, and plot artifacts next to the requested output path: `<name>.md`, `<name>.plots.json`, `<name>.svg`, and `<name>.png` when `matplotlib` is installed.
 
 The local backend can run against local model servers without API spend:
