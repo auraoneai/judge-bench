@@ -1,32 +1,70 @@
 # judge-bench
 
-`judge-bench` runs synthetic diagnostics for LLM-as-judge reliability: position bias, verbosity bias, self-preference, paraphrase stability, anchoring, and calibration. It emits JSON, Markdown, and plot-ready summaries.
+Probe an LLM judge for position, verbosity, self-preference, paraphrase, anchoring, and calibration sensitivity.
+
+`judge-bench` is for evaluation engineers choosing or monitoring an LLM-as-judge configuration. Unlike a model leaderboard, it runs controlled synthetic response pairs through a selected backend, records probe-level evidence, caches repeated calls, and produces reviewable report and plot artifacts.
+
+## Inspectable Output
+
+A run writes:
+
+- `<name>.json`: backend, model, synthetic disclosure, cache hits/misses, and probe results.
+- `<name>.md`: a concise diagnostic report.
+- `<name>.plots.json`: plot-ready reliability and bias points.
+- `<name>.svg`: deterministic plots.
+- `<name>.png`: only when `matplotlib` is installed.
+
+The built-in dry-run cost estimate uses static per-call constants for planning. It does not query provider pricing and should not be treated as a quote.
+
+## Runtime Boundary
+
+The default `local-judge` model is a deterministic lexical heuristic and makes no network request. `ollama:`, `vllm:`, and hosted Hugging Face modes call the configured local HTTP endpoint; `transformers:` loads a local Python model pipeline. The `openai`, `anthropic`, and `google` backends send the synthetic prompt/response pairs to those providers and require their standard API-key environment variables. Paid-backend runs require `--confirm-cost`.
+
+Cache entries contain model inputs and outputs as local JSON files. Choose `--cache-dir` accordingly when prompts or rationales are sensitive.
+
+## Install
+
+```bash
+python -m pip install judge-bench==0.1.2
+```
+
+For development from a clone:
+
+```bash
+python -m pip install -e .
+```
 
 ## Quickstart
 
-```bash
-pip install judge-bench
-judge-bench run --backend openai --model gpt-4o --probes position_bias --dry-run
-judge-bench run --backend local --probes all --pairs 20 --cache-dir .judge-bench-cache --output report.json
-```
-
-Provider backends call their public APIs directly with standard environment variables:
-`OPENAI_API_KEY` for `--backend openai`, `ANTHROPIC_API_KEY` for `--backend anthropic`,
-and `GEMINI_API_KEY` for `--backend google`. Non-dry runs require `--confirm-cost`.
-
-Repeated judge calls are cached by `(backend family, model, prompt, response_a, response_b)` under `.judge-bench-cache` so paid backends do not re-run the same synthetic diagnostic pair. Use `--cache-dir` to isolate or share caches across runs.
-Each run writes JSON, Markdown, and plot artifacts next to the requested output path: `<name>.md`, `<name>.plots.json`, `<name>.svg`, and `<name>.png` when `matplotlib` is installed.
-
-The local backend can run against local model servers without API spend:
+Run a fully offline diagnostic:
 
 ```bash
-judge-bench run --backend local --model ollama:llama3.1 --probes position_bias --output report.json
-JUDGE_BENCH_LOCAL_URL=http://localhost:8000/v1 judge-bench run --backend local --model vllm:meta-llama/Llama-3.1-8B-Instruct --probes position_bias --output report.json
-JUDGE_BENCH_LOCAL_URL=http://localhost:8080 judge-bench run --backend local --model hf:mistral --probes position_bias --output report.json
+judge-bench run \
+  --backend local \
+  --model local-judge \
+  --probes position_bias,calibration \
+  --pairs 3 \
+  --cache-dir .judge-bench-cache \
+  --output judge-report.json
 ```
 
-Supported local modes are `ollama:<model>` for Ollama `/api/generate`, `vllm:<model>` for OpenAI-compatible `/chat/completions`, and `hf:<model>` or `transformers:<model>` for Hugging Face text generation. `JUDGE_BENCH_LOCAL_BACKEND`, `JUDGE_BENCH_LOCAL_URL`, and `JUDGE_BENCH_LOCAL_API_KEY` can override mode, endpoint, and bearer token. If no local mode is selected, `local-judge` uses a deterministic lexical heuristic for offline smoke tests.
+## Backends
 
-## What This Is Not
+- Hosted: `openai`, `anthropic`, `google`.
+- Local HTTP: `ollama:<model>`, `vllm:<model>`, `hf:<model>`.
+- Local Python: `transformers:<model>` with `transformers` installed.
+- Offline smoke test: `local-judge`.
 
-This is not a benchmark, leaderboard, or claim of model superiority. All bundled pairs are synthetic and disclosed as such.
+See [`docs/what-each-probe-measures.md`](docs/what-each-probe-measures.md), [`docs/interpreting-position-bias.md`](docs/interpreting-position-bias.md), and [`docs/methodology.md`](docs/methodology.md).
+
+## Release Status
+
+Registry status verified July 13, 2026: version `0.1.2` is published on PyPI and tagged `v0.1.2` in the public repository. The project is alpha software. No model-quality, superiority, or adoption claim is made.
+
+## Limits
+
+All bundled response pairs are synthetic. Results characterize the selected prompts, backend, model, and probe set; they do not establish general model quality or production safety.
+
+## Next Action
+
+Run the offline `local-judge` quickstart, inspect the probe-level Markdown and SVG evidence, then repeat with the intended production judge only after confirming the cache, data-sharing, network, and cost boundary.
