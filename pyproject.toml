@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "judge-bench"
 version = "0.1.2"
-description = "Synthetic bias and calibration probes for testing LLM-as-judge reliability."
+description = "LLM-as-a-judge bias and calibration testing with synthetic probes for position, verbosity, and calibration sensitivity."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "AuraOne" }]
-keywords = ["llm-as-judge", "judge-bias", "model-evaluation", "calibration", "evals", "synthetic-data"]
+keywords = ["llm-as-judge", "judge-bias", "model-evaluation", "calibration", "evals", "synthetic-data", "llm-as-a-judge"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -26,11 +26,12 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/auraoneai/judge-bench"
+Homepage = "https://auraone.ai/open/judge-bench"
 Documentation = "https://github.com/auraoneai/judge-bench#readme"
 Repository = "https://github.com/auraoneai/judge-bench.git"
 Issues = "https://github.com/auraoneai/judge-bench/issues"
 Changelog = "https://github.com/auraoneai/judge-bench/blob/main/CHANGELOG.md"
+Source = "https://github.com/auraoneai/judge-bench"
 
 [project.scripts]
 judge-bench = "judge_bench.runner:main"
